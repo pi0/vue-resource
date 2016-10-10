@@ -184,35 +184,37 @@ p$1.catch = function (onRejected) {
  * Promise adapter.
  */
 
-if (typeof Promise === 'undefined') {
+var inBrowser$1 = typeof window !== 'undefined';
+
+if (inBrowser$1 && typeof window.Promise === 'undefined') {
     window.Promise = Promise$1;
 }
 
 function PromiseObj(executor, context) {
 
-    if (executor instanceof Promise) {
+    if (executor instanceof Promise$1) {
         this.promise = executor;
     } else {
-        this.promise = new Promise(executor.bind(context));
+        this.promise = new Promise$1(executor.bind(context));
     }
 
     this.context = context;
 }
 
 PromiseObj.all = function (iterable, context) {
-    return new PromiseObj(Promise.all(iterable), context);
+    return new PromiseObj(Promise$1.all(iterable), context);
 };
 
 PromiseObj.resolve = function (value, context) {
-    return new PromiseObj(Promise.resolve(value), context);
+    return new PromiseObj(Promise$1.resolve(value), context);
 };
 
 PromiseObj.reject = function (reason, context) {
-    return new PromiseObj(Promise.reject(reason), context);
+    return new PromiseObj(Promise$1.reject(reason), context);
 };
 
 PromiseObj.race = function (iterable, context) {
-    return new PromiseObj(Promise.race(iterable), context);
+    return new PromiseObj(Promise$1.race(iterable), context);
 };
 
 var p = PromiseObj.prototype;
@@ -251,7 +253,7 @@ p.finally = function (callback) {
         return value;
     }, function (reason) {
         callback.call(this);
-        return Promise.reject(reason);
+        return Promise$1.reject(reason);
     });
 };
 
@@ -636,8 +638,18 @@ function template (options) {
  * Service for URL templating.
  */
 
-var ie = document.documentMode;
-var el = document.createElement('a');
+var inBrowser = typeof window !== 'undefined';
+var ie = inBrowser ? document.documentMode : 11;
+var el = inBrowser ? document.createElement('a') : {
+    href: null,
+    protocol: null,
+    port: null,
+    host: null,
+    hostname: null,
+    pathname: null,
+    search: null,
+    hash: null
+};
 
 function Url(url, params) {
 
@@ -801,8 +813,9 @@ function xdrClient (request) {
  * CORS Interceptor.
  */
 
-var ORIGIN_URL = Url.parse(location.href);
-var SUPPORTS_CORS = 'withCredentials' in new XMLHttpRequest();
+var inBrowser$2 = typeof window !== 'undefined';
+var ORIGIN_URL = Url.parse(inBrowser$2 ? location.href : '');
+var SUPPORTS_CORS = inBrowser$2 ? 'withCredentials' in new XMLHttpRequest() : true;
 
 function cors (request, next) {
 
@@ -883,6 +896,8 @@ function body (request, next) {
  * JSONP client.
  */
 
+var inBrowser$3 = typeof window !== 'undefined';
+
 function jsonpClient (request) {
     return new PromiseObj(function (resolve) {
 
@@ -906,24 +921,28 @@ function jsonpClient (request) {
 
             resolve(request.respondWith(body, { status: status }));
 
-            delete window[callback];
-            document.body.removeChild(script);
+            if (inBrowser$3) {
+                delete window[callback];
+                document.body.removeChild(script);
+            }
         };
 
         request.params[name] = callback;
 
-        window[callback] = function (result) {
-            body = JSON.stringify(result);
-        };
+        if (inBrowser$3) {
+            window[callback] = function (result) {
+                body = JSON.stringify(result);
+            };
 
-        script = document.createElement('script');
-        script.src = request.getUrl();
-        script.type = 'text/javascript';
-        script.async = true;
-        script.onload = handler;
-        script.onerror = handler;
+            script = document.createElement('script');
+            script.src = request.getUrl();
+            script.type = 'text/javascript';
+            script.async = true;
+            script.onload = handler;
+            script.onerror = handler;
 
-        document.body.appendChild(script);
+            document.body.appendChild(script);
+        }
     });
 }
 
@@ -1019,10 +1038,13 @@ function timeout (request, next) {
  * XMLHttp client.
  */
 
+var inBrowser$4 = typeof window !== 'undefined';
+var XMLHttpRequest$1 = inBrowser$4 ? window.XMLHttpRequest : require('xhr2');
+
 function xhrClient (request) {
     return new PromiseObj(function (resolve) {
 
-        var xhr = new XMLHttpRequest(),
+        var xhr = new XMLHttpRequest$1(),
             handler = function (event) {
 
             var response = request.respondWith('response' in xhr ? xhr.response : xhr.responseText, {
@@ -1137,6 +1159,119 @@ function sendRequest(request, resolve) {
 
     resolve(client(request));
 }
+
+var asyncGenerator = function () {
+  function AwaitValue(value) {
+    this.value = value;
+  }
+
+  function AsyncGenerator(gen) {
+    var front, back;
+
+    function send(key, arg) {
+      return new Promise(function (resolve, reject) {
+        var request = {
+          key: key,
+          arg: arg,
+          resolve: resolve,
+          reject: reject,
+          next: null
+        };
+
+        if (back) {
+          back = back.next = request;
+        } else {
+          front = back = request;
+          resume(key, arg);
+        }
+      });
+    }
+
+    function resume(key, arg) {
+      try {
+        var result = gen[key](arg);
+        var value = result.value;
+
+        if (value instanceof AwaitValue) {
+          Promise.resolve(value.value).then(function (arg) {
+            resume("next", arg);
+          }, function (arg) {
+            resume("throw", arg);
+          });
+        } else {
+          settle(result.done ? "return" : "normal", result.value);
+        }
+      } catch (err) {
+        settle("throw", err);
+      }
+    }
+
+    function settle(type, value) {
+      switch (type) {
+        case "return":
+          front.resolve({
+            value: value,
+            done: true
+          });
+          break;
+
+        case "throw":
+          front.reject(value);
+          break;
+
+        default:
+          front.resolve({
+            value: value,
+            done: false
+          });
+          break;
+      }
+
+      front = front.next;
+
+      if (front) {
+        resume(front.key, front.arg);
+      } else {
+        back = null;
+      }
+    }
+
+    this._invoke = send;
+
+    if (typeof gen.return !== "function") {
+      this.return = undefined;
+    }
+  }
+
+  if (typeof Symbol === "function" && Symbol.asyncIterator) {
+    AsyncGenerator.prototype[Symbol.asyncIterator] = function () {
+      return this;
+    };
+  }
+
+  AsyncGenerator.prototype.next = function (arg) {
+    return this._invoke("next", arg);
+  };
+
+  AsyncGenerator.prototype.throw = function (arg) {
+    return this._invoke("throw", arg);
+  };
+
+  AsyncGenerator.prototype.return = function (arg) {
+    return this._invoke("return", arg);
+  };
+
+  return {
+    wrap: function (fn) {
+      return function () {
+        return new AsyncGenerator(fn.apply(this, arguments));
+      };
+    },
+    await: function (value) {
+      return new AwaitValue(value);
+    }
+  };
+}();
 
 var classCallCheck = function (instance, Constructor) {
   if (!(instance instanceof Constructor)) {
