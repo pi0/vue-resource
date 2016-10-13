@@ -641,14 +641,14 @@ function template (options) {
 var inBrowser = typeof window !== 'undefined';
 var ie = inBrowser ? document.documentMode : 11;
 var el = inBrowser ? document.createElement('a') : {
-    href: null,
-    protocol: null,
-    port: null,
-    host: null,
-    hostname: null,
-    pathname: null,
-    search: null,
-    hash: null
+    href: '',
+    protocol: '',
+    port: '',
+    host: '',
+    hostname: '',
+    pathname: '',
+    search: '',
+    hash: ''
 };
 
 function Url(url, params) {
