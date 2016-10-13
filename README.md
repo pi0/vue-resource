@@ -32,7 +32,10 @@ Available on [jsdelivr](https://cdn.jsdelivr.net/vue.resource/undefined/vue-reso
 {
   // GET /someUrl
   this.$http.get('/someUrl').then((response) => {
-    // success callback
+
+    // get body data
+    this.$set('someData', response.body);
+
   }, (response) => {
     // error callback
   });

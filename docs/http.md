@@ -89,7 +89,7 @@ blob() | `Promise` | Resolves the body as Blob object
     // get 'Expires' header
     response.headers.get('Expires');
 
-    // set data on vm
+    // get body data
     this.$set('someData', response.body);
 
   }, (response) => {
@@ -132,10 +132,11 @@ Vue.http.interceptors.push((request, next) => {
 
 ### Request and Response processing
 ```js
-Vue.http.interceptors.push((request, next)  => {
+Vue.http.interceptors.push((request, next) => {
 
   // modify request
   request.method = 'POST';
+  request.headers.set('foo', 'bar');
 
   // continue to next interceptor
   next((response) => {
